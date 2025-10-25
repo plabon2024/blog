@@ -1,13 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuSeparator,
-    DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+
 import {
     NavigationMenu,
     NavigationMenuItem,
@@ -38,27 +32,55 @@ import { useTheme } from "next-themes";
 export default function Navbar() {
     const [hidden, setHidden] = useState(false);
     const [lastScrollY, setLastScrollY] = useState(0);
+    const [mounted, setMounted] = useState(false);
     const { theme } = useTheme();
-    const controlNavbar = () => {
-        if (window.scrollY > lastScrollY && window.scrollY > 80) {
-            // scroll down
-            setHidden(true);
-        } else {
-            // scroll up
-            setHidden(false);
-        }
-        setLastScrollY(window.scrollY);
-    };
+
+    // Handle mounting to prevent hydration mismatch
+    useEffect(() => {
+        setMounted(true);
+    }, []);
 
     useEffect(() => {
+        const controlNavbar = () => {
+            if (typeof window !== 'undefined') {
+                if (window.scrollY > lastScrollY && window.scrollY > 80) {
+                    // scroll down
+                    setHidden(true);
+                } else {
+                    // scroll up
+                    setHidden(false);
+                }
+                setLastScrollY(window.scrollY);
+            }
+        };
+
         window.addEventListener("scroll", controlNavbar);
         return () => window.removeEventListener("scroll", controlNavbar);
     }, [lastScrollY]);
 
+    // Prevent flash of unstyled content
+    if (!mounted) {
+        return (
+            <section className="fixed w-full top-0 z-50 bg-white/50 dark:bg-black/50">
+                <div className="container mx-auto">
+                    <nav className="flex items-center justify-between px-4 py-4 gap-4">
+                        <Link href="/" className="flex items-center gap-2 flex-shrink-0">
+                            <div className="w-8 h-8 bg-[#6c47ff] rounded-lg flex items-center justify-center">
+                                <span className="text-white font-bold text-lg">B</span>
+                            </div>
+                            <span className="hidden sm:inline font-bold text-lg">BlogHub</span>
+                        </Link>
+                    </nav>
+                </div>
+            </section>
+        );
+    }
+
     return (
         <section
             className={`fixed w-full top-0 z-50
-     bg-clip-padding backdrop-filter  backdrop-blur-3xl  backdrop-saturate-100 backdrop-contrast-100  ${theme === "light" ? "bg-white/50 text-black" : "bg-black/50 text-white"}	 
+     bg-clip-padding backdrop-filter backdrop-blur-3xl backdrop-saturate-100 backdrop-contrast-100  
+     ${theme === "light" ? "bg-white/50 text-black" : "bg-black/50 text-white"}	 
         transition-transform duration-500 ease-in-out ${hidden ? "-translate-y-full" : "translate-y-0"
                 }`}
         >
