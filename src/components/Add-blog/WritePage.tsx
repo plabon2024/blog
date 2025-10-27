@@ -15,6 +15,8 @@ const WritePage = () => {
   const [title, setTitle] = useState<string>("");
   const [contentBlocks, setContentBlocks] = useState<ContentBlock[]>([]);
   const { theme } = useTheme();
+  const [uploading, setUploading] = useState(false);
+
   const addContentBlock = (type: ContentBlock["type"]) => {
     const newBlock: ContentBlock = {
       id: Date.now(),
@@ -37,13 +39,28 @@ const WritePage = () => {
     setContentBlocks(contentBlocks.filter((block) => block.id !== id));
   };
 
+const uploadToCloudinary = async (file: File): Promise<string> => {
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append(
+      "upload_preset",
+      process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET!
+    );
+
+    const res = await fetch(
+      `https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`,
+      { method: "POST", body: formData }
+    );
+
+    const data = await res.json();
+    return data.secure_url;
+  };
+
   const handleFeaturedImageUpload = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
-      reader.onloadend = () => {
-        setFeaturedImage(reader.result as string);
-      };
+      reader.onloadend = () => setFeaturedImage(reader.result as string);
       reader.readAsDataURL(file);
     }
   };
@@ -52,28 +69,55 @@ const WritePage = () => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
-      reader.onloadend = () => {
-        updateBlockContent(id, reader.result as string);
-      };
+      reader.onloadend = () => updateBlockContent(id, reader.result as string);
       reader.readAsDataURL(file);
     }
   };
 
-  const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
+const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    
-    const formData = {
-      featuredImage,
-      title,
-      contentBlocks: contentBlocks.map(block => ({
-        type: block.type,
-        content: block.content
-      }))
-    };
+    setUploading(true);
 
-    console.log("Form Data:", formData);
-    console.log("JSON Format:", JSON.stringify(formData, null, 2));
+    try {
+      // Upload featured image if it’s a base64 string
+      let uploadedFeaturedImage = featuredImage;
+      if (featuredImage && featuredImage.startsWith("data:")) {
+        const blob = await fetch(featuredImage).then((r) => r.blob());
+        uploadedFeaturedImage = await uploadToCloudinary(new File([blob], "featured.jpg"));
+      }
+
+      // Upload all image blocks that are base64
+      const updatedBlocks = await Promise.all(
+        contentBlocks.map(async (block) => {
+          if (block.type === "image" && block.content.startsWith("data:")) {
+            const blob = await fetch(block.content).then((r) => r.blob());
+            const cloudUrl = await uploadToCloudinary(new File([blob], "block.jpg"));
+            return { ...block, content: cloudUrl };
+          }
+          return block;
+        })
+      );
+
+      const formData = {
+        featuredImage: uploadedFeaturedImage,
+        title,
+        contentBlocks: updatedBlocks.map((block) => ({
+          type: block.type,
+          content: block.content,
+        })),
+      };
+
+      console.log("Final form data:", formData);
+      console.log("JSON:", JSON.stringify(formData, null, 2));
+      // Submit formData to your backend here
+    } catch (error) {
+      console.error("Error during submission:", error);
+    } finally {
+      setUploading(false);
+    }
   };
+
+
 
   const renderContentBlock = (block: ContentBlock, index: number) => {
     switch (block.type) {
@@ -118,7 +162,7 @@ const WritePage = () => {
               ) : (
                 <div className="flex items-center justify-center w-full py-12 border-2 border-dashed border-gray-200 rounded hover:border-gray-300 transition">
                   <div className="text-center">
-                    <Image className="mx-auto mb-2 text-gray-300" size={40} />
+                    <Image className="mx-auto mb-2 text-gray-300"  size={40} />
                     <span className="text-sm text-gray-400">Click to upload image</span>
                   </div>
                 </div>
@@ -128,10 +172,10 @@ const WritePage = () => {
         );
       case "code":
         return (
-          <div className={ ` ${theme === "light" ? "bg-gray-50" : "bg-white/10"}	 rounded p-4 `}>
+          <div className={` ${theme === "light" ? "bg-gray-50" : "bg-white/10"}	 rounded p-4 `}>
             <textarea
               id={`code-${block.id}`}
-              className={    `w-full p-0 border-0 resize-none font-mono text-sm bg-transparent focus:outline-none ${theme === "light" ? "text-gray-800" : "text-gray-100"} overflow-visible `}
+              className={`w-full p-0 border-0 resize-none font-mono text-sm bg-transparent focus:outline-none ${theme === "light" ? "text-gray-800" : "text-gray-100"} overflow-visible `}
               rows={6}
               placeholder="// Enter code..."
               value={block.content}
@@ -204,7 +248,7 @@ const WritePage = () => {
                 className="flex items-center justify-center w-full py-16 border-2 border-dashed border-gray-200 rounded cursor-pointer hover:border-gray-300 transition"
               >
                 <div className="text-center">
-                  <Image className="mx-auto mb-3 text-gray-300" size={48} />
+                  <Image className="mx-auto mb-3 text-gray-300"  size={48} />
                   <span className="text-gray-400">Add a cover image</span>
                 </div>
               </label>
